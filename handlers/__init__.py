@@ -1,6 +1,6 @@
 from .commands import (
     start_command,
-    about_command,
+    about_command,  # Make sure this is included
     help_command,
     create_quiz_command,
     stats_command,
@@ -16,7 +16,7 @@ def register_handlers(application):
     """Register all handlers with the application"""
     # Command handlers
     application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("about", about_command))
+    application.add_handler(CommandHandler("about", about_command))  # This line is critical
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("createquiz", create_quiz_command))
     application.add_handler(CommandHandler("stats", stats_command))
