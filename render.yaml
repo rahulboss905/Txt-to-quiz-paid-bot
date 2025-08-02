@@ -3,7 +3,7 @@ services:
     name: quiz-bot
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: python bot.py
+    startCommand: python main.py
     envVars:
       - key: TELEGRAM_TOKEN
         fromGroup: telegram
@@ -16,4 +16,4 @@ services:
       - key: PORT
         value: 10000
     healthCheckPath: /health
-    plan: starter  # Required for 24/7 operation
+    plan: starter
