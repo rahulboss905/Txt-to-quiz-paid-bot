@@ -372,13 +372,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     user_id = query.from_user.id
     
     if query.data == "premium_plans":
-        await plan_command(update, context, from_button=True)
+        await plan_command(update, context)
     elif query.data == "my_plan":
         await myplan_command(update, context)
     elif query.data == "help":
         await help_command(update, context)
 
-async def plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from_button=False) -> None:
+async def plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show premium plans with customizable message"""
     # Customizable plan message (can be set in environment variables)
     plan_message = os.getenv('PLAN_MESSAGE', 
@@ -404,7 +404,7 @@ async def plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from_
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    if from_button:
+    if update.callback_query:
         await update.callback_query.message.reply_text(
             plan_message,
             parse_mode='Markdown',
@@ -484,7 +484,7 @@ async def add_premium_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"⏰ ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇꜱꜱ : {duration_days} day\n"
             f"⏳ ᴊᴏɪɴɪɴɢ ᴅᴀᴛᴇ : {join_date}\n"
             f"⏱️ ᴊᴏɪɴɪɴɢ ᴛɪᴍᴇ : {join_time}\n\n"
-            f"⌛️ ᴇxᴘɪʀʏ ᴅᴀᴛᴇ : {expire_date}\n"
+            f"⌛️ ᴇxᴘɪʀʏ �ᴅᴀᴛᴇ : {expire_date}\n"
             f"⏱️ ᴇxᴘɪʀʏ ᴛɪᴍᴇ : {expire_time}\n"
         )
         
@@ -792,6 +792,7 @@ async def myplan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"⌛️ ᴇxᴘɪʀʏ ᴅᴀᴛᴇ : {expire_date}\n"
             f"⏱️ ᴇxᴘɪʀʏ ᴛɪᴍᴇ : {expire_time}\n"
         )
+        await update.message.reply_text(message, parse_mode='Markdown')
     else:
         # Add contact button
         keyboard = [
@@ -811,9 +812,6 @@ async def myplan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             parse_mode='Markdown',
             reply_markup=reply_markup
         )
-        return
-    
-    await update.message.reply_text(message, parse_mode='Markdown')
 
 async def getinfo_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Get user information (owner only)"""
@@ -951,8 +949,16 @@ def main() -> None:
     application.add_handler(CommandHandler("broadcast", broadcast_command))
     application.add_handler(MessageHandler(filters.Document.TEXT, handle_document))
     
-    # Add button handler
+    # Add button handler - MUST be after command handlers
     application.add_handler(CallbackQueryHandler(button_handler))
+    
+    # Add error handler
+    async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+        logger.error("Exception while handling an update:", exc_info=context.error)
+        if update and update.message:
+            await update.message.reply_text('An error occurred. Please try again.')
+    
+    application.add_error_handler(error_handler)
     
     # Start polling
     logger.info("Starting Telegram bot in polling mode...")
