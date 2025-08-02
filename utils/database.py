@@ -1,6 +1,7 @@
 import os
 import logging
 import re
+import time  # Added for get_bot_stats function
 from datetime import datetime, timedelta
 from pymongo import MongoClient, ReturnDocument
 
@@ -86,14 +87,18 @@ def get_bot_stats() -> dict:
     stats['active_premium'] = premium_subscriptions.count_documents({
         'expires_at': {'$gt': datetime.utcnow()}
     })
+    
+    # Active today (last 24 hours)
+    now = time.time()
     stats['active_today'] = users.count_documents({
-        'last_quiz_time': {'$gt': time.time() - 86400}
+        'last_quiz_time': {'$gt': now - 86400}  # 86400 seconds = 24 hours
     })
     
     # Free quizzes generated
     total_quizzes = users.aggregate([
         {'$group': {'_id': None, 'total': {'$sum': '$quiz_count'}}}
     ])
-    stats['total_quiz_count'] = next(total_quizzes, {}).get('total', 0)
+    total_quiz_result = next(total_quizzes, None)
+    stats['total_quiz_count'] = total_quiz_result['total'] if total_quiz_result else 0
     
     return stats
