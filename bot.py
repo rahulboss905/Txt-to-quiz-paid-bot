@@ -7,13 +7,14 @@ import re
 import json
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
     filters,
-    ContextTypes
+    ContextTypes,
+    CallbackQueryHandler
 )
 from pymongo import MongoClient, ReturnDocument
 
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 # Constants
 COOLDOWN_MINUTES = 10
 FREE_USER_LIMIT = 10
+OWNER_USERNAME = "Mr_rahul090"  # Owner's Telegram username
 
 # MongoDB setup
 MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017')
@@ -236,7 +238,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "I can turn your text files into interactive 10-second quizzes!\n\n"
         "🔹 Use /createquiz - Start quiz creation\n"
         "🔹 Use /help - Show formatting guide\n"
-        "🔹 Use /about - Bot information\n\n"
+        "🔹 Use /about - Bot information\n"
+        "🔹 Use /myplan - Check your premium status\n"
+        "🔹 Use /plan - View premium plans\n\n"
     )
     
     if premium:
@@ -251,28 +255,47 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             "- Upgrade with /upgrade\n\n"
         )
     
-    # Add myplan command info
-    welcome_msg += "🔹 Use /myplan - Check your premium status"
+    # Add contact button
+    keyboard = [
+        [InlineKeyboardButton("📞 Contact Admin", url=f"https://t.me/{OWNER_USERNAME}")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text(welcome_msg, parse_mode='Markdown')
+    await update.message.reply_text(
+        welcome_msg,
+        parse_mode='Markdown',
+        reply_markup=reply_markup
+    )
 
 async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show bot information"""
     about_text = (
-        "🤖 *Quiz Bot Pro*\n"
-        "*Version*: 2.0 (MongoDB Edition)\n"
-        "*Creator*: @YourUsername\n\n"
-        "✨ *Features*:\n"
-        "- Create quizzes from text files\n"
-        "- Premium subscriptions\n"
-        "- 10-second timed polls\n\n"
-        "📣 *Support*: @YourSupportChannel\n"
-        "📂 *Source*: github.com/your-repo"
+        f"🤖 *Quiz Bot Pro*\n"
+        f"*Version*: 2.0 (MongoDB Edition)\n"
+        f"*Creator*: [@{OWNER_USERNAME}](https://t.me/{OWNER_USERNAME})\n\n"
+        f"✨ *Features*:\n"
+        f"- Create quizzes from text files\n"
+        f"- Premium subscriptions\n"
+        f"- 10-second timed polls\n\n"
+        f"📣 *Support*: @{OWNER_USERNAME}\n"
+        f"📂 *Source*: github.com/your-repo"
     )
-    await update.message.reply_text(about_text, parse_mode='Markdown')
+    
+    # Add contact button
+    keyboard = [
+        [InlineKeyboardButton("📞 Contact Admin", url=f"https://t.me/{OWNER_USERNAME}")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        about_text, 
+        parse_mode='Markdown',
+        disable_web_page_preview=True,
+        reply_markup=reply_markup
+    )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show detailed formatting instructions"""
+    """Show detailed formatting instructions with inline buttons"""
     user_id = update.effective_user.id
     is_owner = user_id == OWNER_ID
     premium = is_premium(user_id)
@@ -318,12 +341,81 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "/stats - Show bot statistics\n"
             "/addpremium <user_id> <duration> - Grant premium\n"
             "/removepremium <user_id> - Revoke premium\n"
+            "/broadcast <message> - Broadcast message\n"
+            "/getinfo <user_id> - Get user info\n\n"
         )
     
-    # Add myplan command
-    help_text += "🔹 Use /myplan - Check your premium status"
+    # Add buttons
+    keyboard = [
+        [
+            InlineKeyboardButton("💎 Premium Plans", callback_data="premium_plans"),
+            InlineKeyboardButton("📞 Contact Admin", url=f"https://t.me/{OWNER_USERNAME}")
+        ],
+        [
+            InlineKeyboardButton("🆘 Help", callback_data="help"),
+            InlineKeyboardButton("📊 My Plan", callback_data="my_plan")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text(help_text, parse_mode='Markdown')
+    await update.message.reply_text(
+        help_text, 
+        parse_mode='Markdown',
+        reply_markup=reply_markup
+    )
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle inline button presses"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    
+    if query.data == "premium_plans":
+        await plan_command(update, context, from_button=True)
+    elif query.data == "my_plan":
+        await myplan_command(update, context)
+    elif query.data == "help":
+        await help_command(update, context)
+
+async def plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from_button=False) -> None:
+    """Show premium plans with customizable message"""
+    # Customizable plan message (can be set in environment variables)
+    plan_message = os.getenv('PLAN_MESSAGE', 
+        "🌟 *Premium Plans* 🌟\n\n"
+        "🔹 *Basic Plan* - 30 days\n"
+        "   - Unlimited quizzes\n"
+        "   - Priority support\n"
+        "   - Price: $5\n\n"
+        "🔹 *Standard Plan* - 90 days\n"
+        "   - All Basic features\n"
+        "   - Early access to new features\n"
+        "   - Price: $12\n\n"
+        "🔹 *Pro Plan* - 365 days\n"
+        "   - All Standard features\n"
+        "   - Custom bot features\n"
+        "   - Price: $35\n\n"
+        f"Contact @{OWNER_USERNAME} to get premium!"
+    )
+    
+    # Add contact button
+    keyboard = [
+        [InlineKeyboardButton("💬 Contact Admin", url=f"https://t.me/{OWNER_USERNAME}")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    if from_button:
+        await update.callback_query.message.reply_text(
+            plan_message,
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
+    else:
+        await update.message.reply_text(
+            plan_message,
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
 
 async def create_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Initiate quiz creation process"""
@@ -473,14 +565,21 @@ async def upgrade_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             parse_mode='Markdown'
         )
     else:
+        # Add contact button
+        keyboard = [
+            [InlineKeyboardButton("💬 Contact Admin", url=f"https://t.me/{OWNER_USERNAME}")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
         await update.message.reply_text(
             "🌟 *Upgrade to Premium!*\n\n"
             "Enjoy these benefits:\n"
             "✅ Unlimited quiz generation\n"
             "✅ No cooldown periods\n"
             "✅ Priority support\n\n"
-            "Contact @admin to get premium access!",
-            parse_mode='Markdown'
+            f"Contact @{OWNER_USERNAME} to get premium access!",
+            parse_mode='Markdown',
+            reply_markup=reply_markup
         )
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -516,7 +615,9 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"• Free Quizzes Generated: `{total_quiz_count}`\n\n"
         "👑 Owner Commands:\n"
         "`/addpremium <user_id> <duration>` - Add premium\n"
-        "`/removepremium <user_id>` - Remove premium"
+        "`/removepremium <user_id>` - Remove premium\n"
+        "`/broadcast <message>` - Broadcast message\n"
+        "`/getinfo <user_id>` - Get user info"
     )
     
     await update.message.reply_text(stats_msg, parse_mode='Markdown')
@@ -692,6 +793,12 @@ async def myplan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"⏱️ ᴇxᴘɪʀʏ ᴛɪᴍᴇ : {expire_time}\n"
         )
     else:
+        # Add contact button
+        keyboard = [
+            [InlineKeyboardButton("💬 Contact Admin", url=f"https://t.me/{OWNER_USERNAME}")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
         message = (
             "ℹ️ You do not have an active premium plan.\n\n"
             "Use /upgrade to learn about premium benefits:\n"
@@ -699,8 +806,115 @@ async def myplan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             "✅ No cooldown periods\n"
             "✅ Priority support"
         )
+        await update.message.reply_text(
+            message, 
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
+        return
     
     await update.message.reply_text(message, parse_mode='Markdown')
+
+async def getinfo_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Get user information (owner only)"""
+    user_id = update.effective_user.id
+    
+    if user_id != OWNER_ID:
+        await update.message.reply_text("❌ Owner only command!")
+        return
+    
+    if not context.args:
+        await update.message.reply_text("ℹ️ Usage: /getinfo <user_id>")
+        return
+    
+    try:
+        target_id = int(context.args[0])
+        user_data = get_user_data(target_id)
+        premium = is_premium(target_id)
+        
+        # Get premium info
+        premium_info = ""
+        if premium:
+            sub = premium_subscriptions.find_one({'user_id': target_id})
+            expires_at = sub['expires_at']
+            expire_date = expires_at.strftime('%d-%m-%Y')
+            expire_time = expires_at.strftime('%I:%M:%S %p')
+            remaining_days = (expires_at - datetime.utcnow()).days
+            premium_info = (
+                f"🎟️ *Premium Status:* Active\n"
+                f"⏳ *Expires:* {expire_date} at {expire_time}\n"
+                f"⏱️ *Remaining:* {remaining_days} days\n"
+            )
+        else:
+            premium_info = "🎟️ *Premium Status:* Not active\n"
+        
+        # Get quiz stats
+        last_quiz_time = user_data.get('last_quiz_time', 0)
+        if last_quiz_time:
+            last_quiz_str = datetime.fromtimestamp(last_quiz_time).strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            last_quiz_str = "Never"
+            
+        info_msg = (
+            f"👤 *User Info* - `{target_id}`\n\n"
+            f"{premium_info}\n"
+            f"📊 *Quiz Stats:*\n"
+            f"• Total quizzes: {user_data.get('quiz_count', 0)}\n"
+            f"• Last quiz: {last_quiz_str}\n"
+        )
+        
+        await update.message.reply_text(info_msg, parse_mode='Markdown')
+        
+    except Exception as e:
+        logger.error(f"Getinfo error: {e}")
+        await update.message.reply_text(f"❌ Error: {str(e)}")
+
+async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Broadcast message to all users (owner only)"""
+    user_id = update.effective_user.id
+    
+    if user_id != OWNER_ID:
+        await update.message.reply_text("❌ Owner only command!")
+        return
+    
+    if not context.args:
+        await update.message.reply_text("ℹ️ Usage: /broadcast <message>")
+        return
+    
+    message = " ".join(context.args)
+    all_users = users.find({})
+    total = 0
+    success = 0
+    failed = 0
+    
+    # Add broadcast header
+    broadcast_msg = f"📢 *Broadcast from admin:*\n\n{message}"
+    
+    # Send to each user
+    for user in all_users:
+        total += 1
+        try:
+            await context.bot.send_message(
+                chat_id=user['user_id'],
+                text=broadcast_msg,
+                parse_mode='Markdown'
+            )
+            success += 1
+            # Avoid flooding
+            time.sleep(0.1)
+        except Exception as e:
+            failed += 1
+            logger.warning(f"Broadcast failed for {user['user_id']}: {e}")
+    
+    # Report results
+    result_msg = (
+        f"📤 *Broadcast Results*\n\n"
+        f"• Total users: {total}\n"
+        f"• Success: {success}\n"
+        f"• Failed: {failed}\n\n"
+        f"Message sent:\n\n{message}"
+    )
+    await update.message.reply_text(result_msg, parse_mode='Markdown')
 
 def main() -> None:
     """Run the bot and HTTP server"""
@@ -731,8 +945,14 @@ def main() -> None:
     application.add_handler(CommandHandler("addpremium", add_premium_command))
     application.add_handler(CommandHandler("removepremium", remove_premium_command))
     application.add_handler(CommandHandler("upgrade", upgrade_command))
-    application.add_handler(CommandHandler("myplan", myplan_command))  # NEW COMMAND
+    application.add_handler(CommandHandler("myplan", myplan_command))
+    application.add_handler(CommandHandler("plan", plan_command))
+    application.add_handler(CommandHandler("getinfo", getinfo_command))
+    application.add_handler(CommandHandler("broadcast", broadcast_command))
     application.add_handler(MessageHandler(filters.Document.TEXT, handle_document))
+    
+    # Add button handler
+    application.add_handler(CallbackQueryHandler(button_handler))
     
     # Start polling
     logger.info("Starting Telegram bot in polling mode...")
