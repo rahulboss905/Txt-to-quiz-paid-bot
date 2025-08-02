@@ -6,7 +6,8 @@ from .commands import (
     stats_command,
     add_premium_command,
     remove_premium_command,
-    upgrade_command
+    upgrade_command,
+    myplan_command
 )
 from .documents import handle_document
 from telegram.ext import CommandHandler, MessageHandler, filters
@@ -22,6 +23,7 @@ def register_handlers(application):
     application.add_handler(CommandHandler("addpremium", add_premium_command))
     application.add_handler(CommandHandler("removepremium", remove_premium_command))
     application.add_handler(CommandHandler("upgrade", upgrade_command))
+    application.add_handler(CommandHandler("myplan", myplan_command))
     
     # Document handler
     application.add_handler(MessageHandler(filters.Document.TEXT, handle_document))
