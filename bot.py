@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 # Constants
 COOLDOWN_MINUTES = 10
-FREE_USER_LIMIT = 20
+FREE_USER_LIMIT = 10
 OWNER_USERNAME = "Mr_rahul090"
 IST = timezone(timedelta(hours=5, minutes=30))  # Indian Standard Time
 
@@ -255,7 +255,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         reply_markup=reply_markup
     )
 
-# ====================== FIXED ABOUT COMMAND ======================
 async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show bot information - FIXED MARKDOWN"""
     try:
@@ -334,7 +333,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "/add <user_id> <duration> - Grant premium\n"
             "/rem <user_id> - Revoke premium\n"
             "/broadcast <message> - Broadcast to all users\n"
-            "/setplan <name> <duration> <price> - Create premium plan\n"
         )
     
     help_text += "🔹 Use /myplan - Check your premium status\n"
@@ -398,7 +396,7 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         duration_days = (expires_at - now).days
         
         premium_msg = (
-            f"👋 ʜᴇʏ {firstname},\n"
+            f"👋 ʜᴇʏ,\n"
             f"ᴛʜᴀɴᴋ ʏᴏᴜ ꜰᴏʀ ᴘᴜʀᴄʜᴀꜱɪɴɢ ᴘʀᴇᴍɪᴜᴍ.\n"
             f"ᴇɴᴊᴏʏ !! ✨🎉\n\n"
             f"⏰ ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇꜱꜱ : {duration_days} day\n"
@@ -443,7 +441,7 @@ async def rem_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         
         if result.deleted_count > 0:
             removal_msg = (
-                "👋 ʜᴇʏ {firstname},\n\n"
+                "👋 ʜᴇʏ,\n\n"
                 "Your premium subscription has been removed.\n"
                 "If you have any questions, contact support."
             )
@@ -479,15 +477,6 @@ async def upgrade_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             parse_mode='Markdown'
         )
     else:
-        all_plans = list(plans.find({}))
-        
-        if all_plans:
-            plans_text = "\n\n📋 *Available Plans:*\n"
-            for plan in all_plans:
-                plans_text += f"• {plan['plan_name']}: {plan['duration']} - {plan['price']}\n"
-        else:
-            plans_text = ""
-        
         contact_button = InlineKeyboardButton(
             "Contact Owner", 
             url=f"https://t.me/{OWNER_USERNAME}"
@@ -501,7 +490,7 @@ async def upgrade_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             "✅ Unlimited quiz generation\n"
             "✅ No cooldown periods\n"
             "✅ Priority support\n\n"
-            f"Use /plans to see available options{plans_text}\n\n"
+            "See available plans with /plans\n\n"
             "Contact the owner to purchase:",
             parse_mode='Markdown',
             reply_markup=reply_markup
@@ -538,7 +527,6 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "`/add <user_id> <duration>` - Add premium\n"
         "`/rem <user_id>` - Remove premium\n"
         "`/broadcast <message>` - Broadcast to all users\n"
-        "`/setplan <name> <duration> <price>` - Create premium plan"
     )
     
     await update.message.reply_text(stats_msg, parse_mode='Markdown')
@@ -548,7 +536,7 @@ def parse_quiz_file(content: str) -> tuple:
     valid_questions = []
     errors = []
     
-    for i, block in enumerate(blocks, 1):
+    for i, block in enumerate(1):
         lines = [line.strip() for line in block.split('\n') if line.strip()]
         
         if len(lines) not in (6, 7):
@@ -709,7 +697,7 @@ async def myplan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             "✅ Unlimited quiz generation\n"
             "✅ No cooldown periods\n"
             "✅ Priority support\n\n"
-            "Use /plans to see available options"
+            "See available plans with /plans"
         )
         await update.message.reply_text(
             message, 
@@ -717,41 +705,9 @@ async def myplan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             reply_markup=reply_markup
         )
 
-# ====================== FIXED PLANS COMMAND ======================
 async def plans_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show available premium plans - FIXED DATABASE ACCESS"""
+    """Show fixed premium plans message"""
     try:
-        # Safely access the plans collection
-        all_plans = list(plans.find({})) if plans else []
-        
-        if not all_plans:
-            # Create contact button
-            contact_button = InlineKeyboardButton(
-                "Contact Owner", 
-                url=f"https://t.me/{OWNER_USERNAME}"
-            )
-            keyboard = [[contact_button]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await update.message.reply_text(
-                "ℹ️ No plans available yet. Contact owner for premium options.",
-                reply_markup=reply_markup
-            )
-            return
-        
-        # Build plans text
-        plans_text = "🌟 *Available Premium Plans* 🌟\n\n"
-        for plan in all_plans:
-            plan_name = plan.get('plan_name', 'Unknown Plan')
-            duration = plan.get('duration', 'Unknown Duration')
-            price = plan.get('price', 'Unknown Price')
-            
-            plans_text += (
-                f"• *{plan_name}*\n"
-                f"  Duration: {duration}\n"
-                f"  Price: {price}\n\n"
-            )
-        
         # Create contact button
         contact_button = InlineKeyboardButton(
             "Contact Owner", 
@@ -760,57 +716,37 @@ async def plans_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         keyboard = [[contact_button]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        plans_text += "To purchase, contact the owner:"
+        # Fixed premium plans message
+        plans_msg = (
+            "💠 𝗨𝗣𝗚𝗥𝗔𝗗𝗘 𝗧𝗢 𝗣𝗥𝗘𝗠𝗜𝗨𝗠 💠\n\n"
+            "🚀 𝗣𝗿𝗲𝗺𝗶𝘂𝗺 𝗙𝗲𝗮𝘁𝘂𝗿𝗲𝘀:  \n\n"
+            "🧠 𝗨𝗡𝗟𝗜𝗠𝗜𝗧𝗘𝗗 𝗤𝗨𝗜𝗭 𝗖𝗥𝗘𝗔𝗧𝗜𝗢𝗡  \n\n"
+            "🔓 𝙁𝙍𝙀𝙀 𝙋𝙇𝘼𝙉 (𝘸𝘪𝘵𝘩 𝘳𝘦𝘴𝘵𝘳𝘪𝘤𝘵𝘪𝘰𝘯𝘴)  \n"
+            "🕰️ 𝗘𝘅𝗽𝗶𝗿𝘆: Never  \n"
+            "💰 𝗣𝗿𝗶𝗰𝗲: ₹𝟬  \n\n"
+            "🕐 𝟭-𝗗𝗔𝗬 𝗣𝗟𝗔𝗡  \n"
+            "💰 𝗣𝗿𝗶𝗰𝗲: ₹𝟭𝟬 🇮🇳  \n"
+            "📅 𝗗𝘂𝗿𝗮𝘁𝗶𝗼𝗻: 1 Day  \n\n"
+            "📆 𝟭-𝗪𝗘𝗘𝗞 𝗣𝗟𝗔𝗡  \n"
+            "💰 𝗣𝗿𝗶𝗰𝗲: ₹𝟮𝟱 🇮🇳  \n"
+            "📅 𝗗𝘂𝗿𝗮𝘁𝗶𝗼𝗻: 7 Days  \n\n"
+            "🗓️ 𝗠𝗢𝗡𝗧𝗛𝗟𝗬 𝗣𝗟𝗔𝗡  \n"
+            "💰 𝗣𝗿𝗶𝗰𝗲: ₹𝟱𝟬 🇮🇳  \n"
+            "📅 𝗗𝘂𝗿𝗮𝘁𝗶𝗼𝗻: 1 Month  \n\n"
+            "🪙 𝟮-𝗠𝗢𝗡𝗧𝗛 𝗣𝗟𝗔𝗡  \n"
+            "💰 𝗣𝗿𝗶𝗰𝗲: ₹𝟭𝟬𝟬 🇮🇳  \n"
+            "📅 𝗗𝘂𝗿𝗮𝘁𝗶𝗼𝗻: 2 Months  \n\n"
+            "📞 𝗖𝗼𝗻𝘁𝗮𝗰𝘁 𝗡𝗼𝘄 𝘁𝗼 𝗨𝗽𝗴𝗿𝗮𝗱𝗲  \n"
+            "👉 @mr_rahul090"
+        )
         
-        # Send without Markdown to avoid formatting issues
         await update.message.reply_text(
-            plans_text,
+            plans_msg,
             reply_markup=reply_markup
         )
     except Exception as e:
         logger.error(f"Error in plans_command: {e}")
         await update.message.reply_text("⚠️ An error occurred. Please try again later.")
-
-async def set_plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Set premium plans (owner only)"""
-    try:
-        user_id = update.effective_user.id
-        
-        if user_id != OWNER_ID:
-            await update.message.reply_text("❌ Owner only command!")
-            return
-        
-        if len(context.args) < 3:
-            await update.message.reply_text(
-                "ℹ️ Usage: /setplan <plan_name> <duration> <price>\n"
-                "Example: /setplan Basic \"30 days\" $5\n"
-                "Example: /setplan Pro \"1 year\" $30"
-            )
-            return
-        
-        plan_name = context.args[0]
-        duration = " ".join(context.args[1:-1])
-        price = context.args[-1]
-        
-        # Update plans collection
-        plans.update_one(
-            {'plan_name': plan_name},
-            {'$set': {
-                'duration': duration,
-                'price': price
-            }},
-            upsert=True
-        )
-        
-        await update.message.reply_text(
-            f"✅ Plan updated!\n\n"
-            f"Plan Name: {plan_name}\n"
-            f"Duration: {duration}\n"
-            f"Price: {price}"
-        )
-    except Exception as e:
-        logger.error(f"Error in set_plan_command: {e}")
-        await update.message.reply_text("⚠️ An error occurred. Please check your input and try again.")
 
 async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send message to all users (owner only)"""
@@ -933,7 +869,6 @@ def main() -> None:
     application.add_handler(CommandHandler("upgrade", upgrade_command))
     application.add_handler(CommandHandler("myplan", myplan_command))
     application.add_handler(CommandHandler("plans", plans_command))
-    application.add_handler(CommandHandler("setplan", set_plan_command))
     application.add_handler(CommandHandler("broadcast", broadcast_command))
     application.add_handler(MessageHandler(filters.Document.TEXT, handle_document))
     
