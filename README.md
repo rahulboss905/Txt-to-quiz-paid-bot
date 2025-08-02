@@ -34,3 +34,15 @@ OWNER_ID=your_telegram_user_id
 BOT_USERNAME=your_bot_username
 MONGODB_URI=mongodb://user:password@host:port/database
 PORT=8080  # Optional, for health checks
+
+## Key Sections Explained
+
+1. **Features**: Highlights bot capabilities
+2. **Deployment**: Step-by-step setup instructions
+3. **Commands**: User and owner command references
+4. **File Format**: Quiz creation guidelines
+5. **Premium Management**: Subscription workflows
+6. **Health Checks**: Monitoring endpoints
+7. **MongoDB Schema**: Database structure details
+
+This README provides comprehensive setup and usage instructions for your quiz bot with MongoDB backend and premium subscription system.
