@@ -1,2 +1,4 @@
-# Updated: 2025-08-02 - force v20.3
 python-telegram-bot==20.3
+pymongo==4.3.3
+python-dotenv==1.0.0
+requests==2.28.2
