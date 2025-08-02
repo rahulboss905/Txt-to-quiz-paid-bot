@@ -49,4 +49,18 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     
     await update.message.reply_text(welcome_msg, parse_mode='Markdown')
 
-# [Keep all other functions unchanged - including myplan_command and add_premium_command]
+async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    about_text = (
+        "🤖 *Quiz Bot Pro*\n"
+        "*Version*: 2.0 (MongoDB Edition)\n"
+        "*Creator*: @YourUsername\n\n"
+        "✨ *Features*:\n"
+        "- Create quizzes from text files\n"
+        "- Premium subscriptions\n"
+        "- 10-second timed polls\n\n"
+        "📣 *Support*: @YourSupportChannel\n"
+        "📂 *Source*: github.com/your-repo"
+    )
+    await update.message.reply_text(about_text, parse_mode='Markdown')
+
+# [Keep all other functions unchanged - including help_command, create_quiz_command, etc.]
