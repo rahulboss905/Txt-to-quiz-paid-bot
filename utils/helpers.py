@@ -1,0 +1,3 @@
+# Constants
+COOLDOWN_MINUTES = 10
+FREE_USER_LIMIT = 10
