@@ -19,6 +19,33 @@ users.create_index('user_id', unique=True)
 premium_subscriptions.create_index('user_id')
 premium_subscriptions.create_index('expires_at', expireAfterSeconds=0)
 
+def get_user_data(user_id: int) -> dict:
+    """Get or create user data"""
+    return users.find_one_and_update(
+        {'user_id': user_id},
+        {'$setOnInsert': {
+            'quiz_count': 0,
+            'last_quiz_time': 0
+        }},
+        upsert=True,
+        return_document=ReturnDocument.AFTER
+    )
+
+def update_user_data(user_id: int, update: dict):
+    """Update user data"""
+    users.update_one({'user_id': user_id}, {'$set': update})
+
+def is_premium(user_id: int) -> bool:
+    """Check if user has active premium subscription"""
+    return bool(premium_subscriptions.find_one({
+        'user_id': user_id,
+        'expires_at': {'$gt': datetime.utcnow()}
+    }))
+
+def get_premium_subscription(user_id: int):
+    """Get premium subscription details for a user"""
+    return premium_subscriptions.find_one({'user_id': user_id})
+
 def add_premium_subscription(user_id: int, duration: str):
     """Add premium subscription with duration"""
     match = re.match(r'(\d+)\s*(day|month|year)s?', duration.lower())
@@ -51,4 +78,22 @@ def add_premium_subscription(user_id: int, duration: str):
     )
     return expires_at
 
-# [Keep all other existing database functions unchanged]
+def get_bot_stats() -> dict:
+    """Get bot statistics"""
+    stats = {}
+    
+    stats['total_users'] = users.count_documents({})
+    stats['active_premium'] = premium_subscriptions.count_documents({
+        'expires_at': {'$gt': datetime.utcnow()}
+    })
+    stats['active_today'] = users.count_documents({
+        'last_quiz_time': {'$gt': time.time() - 86400}
+    })
+    
+    # Free quizzes generated
+    total_quizzes = users.aggregate([
+        {'$group': {'_id': None, 'total': {'$sum': '$quiz_count'}}}
+    ])
+    stats['total_quiz_count'] = next(total_quizzes, {}).get('total', 0)
+    
+    return stats
