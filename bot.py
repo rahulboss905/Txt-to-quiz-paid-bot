@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 # Constants
 COOLDOWN_MINUTES = 10
-FREE_USER_LIMIT = 10
+FREE_USER_LIMIT = 20
 OWNER_USERNAME = "Mr_rahul090"
 IST = timezone(timedelta(hours=5, minutes=30))  # Indian Standard Time
 
@@ -398,7 +398,7 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         duration_days = (expires_at - now).days
         
         premium_msg = (
-            f"👋 ʜᴇʏ,\n"
+            f"👋 ʜᴇʏ {firstname},\n"
             f"ᴛʜᴀɴᴋ ʏᴏᴜ ꜰᴏʀ ᴘᴜʀᴄʜᴀꜱɪɴɢ ᴘʀᴇᴍɪᴜᴍ.\n"
             f"ᴇɴᴊᴏʏ !! ✨🎉\n\n"
             f"⏰ ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇꜱꜱ : {duration_days} day\n"
@@ -443,7 +443,7 @@ async def rem_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         
         if result.deleted_count > 0:
             removal_msg = (
-                "👋 ʜᴇʏ,\n\n"
+                "👋 ʜᴇʏ {firstname},\n\n"
                 "Your premium subscription has been removed.\n"
                 "If you have any questions, contact support."
             )
