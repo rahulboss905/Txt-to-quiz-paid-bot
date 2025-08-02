@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 # Constants
 COOLDOWN_MINUTES = 10
-FREE_USER_LIMIT = 10
+FREE_USER_LIMIT = 20
 OWNER_USERNAME = "Mr_rahul090"  # Owner's Telegram username
 
 # MongoDB setup
