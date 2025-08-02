@@ -1,26 +1,36 @@
-# Telegram Quiz Bot 🤖
+# Telegram Quiz Bot with Premium Features
 
-A bot that converts text files into interactive Telegram quizzes
+![Bot Demo](https://img.shields.io/badge/Telegram-Quiz%20Bot-blue) 
+![MongoDB](https://img.shields.io/badge/MongoDB-4.4%2B-green)
 
-## Features ✨
-- Parses .txt files with quiz questions
-- Validates question format
-- Sends quizzes as interactive polls
-- Detailed error reporting
+A feature-rich Telegram bot that converts text files into interactive quizzes with premium subscription capabilities.
 
-## Setup Instructions ⚙️
+## Features
 
-1. Get a Telegram bot token from [@BotFather](https://t.me/BotFather)
-2. Clone this repository:
-   ```bash
-   git clone https://github.com/your-username/telegram-quiz-bot.git
-   cd telegram-quiz-bot
-# Telegram Quiz Bot Deployment
+- 🧠 Convert text files to timed quizzes
+- ⏱️ 10-second interactive polls
+- 💎 Premium subscriptions with duration-based access
+- 📊 MongoDB storage for users and subscriptions
+- 📈 Owner dashboard with statistics
+- 🧾 Flexible question formatting
+- 💻 Health check endpoint with status page
 
-## Deployment Steps on Render.com
+## Requirements
 
-1. **Create a new Background Worker service**
-2. **Connect your repository**
-3. **Set environment variables:**
-   - `TELEGRAM_TOKEN`: Your bot token from @BotFather
-4. **Set build commands:**
+- Python 3.8+
+- MongoDB 4.4+
+- Telegram Bot API token
+- Python packages: `python-telegram-bot`, `pymongo`
+
+## Deployment
+
+### 1. Environment Setup
+
+Create `.env` file with required variables:
+
+```env
+TELEGRAM_TOKEN=your_bot_token_here
+OWNER_ID=your_telegram_user_id
+BOT_USERNAME=your_bot_username
+MONGODB_URI=mongodb://user:password@host:port/database
+PORT=8080  # Optional, for health checks
