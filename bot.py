@@ -114,7 +114,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Application setup
 def main():
-    TOKEN = "YOUR_BOT_TOKEN"  # Replace with actual token
+    TOKEN = "7233974422:AAGy7NFIxxUen8tJM6TjNh5uTxRxIcpkk-E"    # Replace with actual token
     
     application = Application.builder().token(TOKEN).build()
     
