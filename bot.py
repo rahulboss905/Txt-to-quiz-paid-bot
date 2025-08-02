@@ -105,16 +105,187 @@ def format_ist(dt: datetime) -> tuple:
     return date_str, time_str
 
 class HealthCheckHandler(BaseHTTPRequestHandler):
-    # ... existing health check implementation ...
+    """Enhanced HTTP handler for health checks and monitoring"""
+    server_version = "TelegramQuizBot/6.0"
+    
+    def do_GET(self):
+        try:
+            start_time = time.time()
+            client_ip = self.client_address[0]
+            user_agent = self.headers.get('User-Agent', 'Unknown')
+            
+            logger.info(f"Health check request: {self.path} from {client_ip} ({user_agent})")
+            
+            if self.path in ['/', '/health', '/status']:
+                response_text = "OK"
+                content_type = "text/plain"
+                
+                if "Mozilla" in user_agent:
+                    status = "🟢 Bot is running"
+                    uptime = time.time() - self.server.start_time
+                    hostname = socket.gethostname()
+                    
+                    total_users = users.count_documents({})
+                    premium_count = premium_subscriptions.count_documents({
+                        'expires_at': {'$gt': datetime.utcnow()}
+                    })
+                    
+                    response_text = f"""
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <head>
+                        <meta charset="UTF-8">
+                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                        <title>Quiz Bot Status</title>
+                        <style>
+                            body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                            .container {{ max-width: 800px; margin: 0 auto; }}
+                            .status {{ font-size: 1.5em; font-weight: bold; color: #2ecc71; }}
+                            .info {{ margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 5px; }}
+                            .stats {{ margin-top: 20px; padding: 15px; background-color: #e9f7fe; border-radius: 5px; }}
+                        </style>
+                    </head>
+                    <body>
+                        <div class="container">
+                            <h1>Telegram Quiz Bot Status</h1>
+                            <div class="status">{status}</div>
+                            
+                            <div class="info">
+                                <p><strong>Hostname:</strong> {hostname}</p>
+                                <p><strong>Uptime:</strong> {uptime:.2f} seconds</p>
+                                <p><strong>Version:</strong> 6.0 (Premium Features)</p>
+                                <p><strong>Last Check:</strong> {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}</p>
+                                <p><strong>Client IP:</strong> {client_ip}</p>
+                                <p><strong>User Agent:</strong> {user_agent}</p>
+                            </div>
+                            
+                            <div class="stats">
+                                <h3>Bot Statistics</h3>
+                                <p><strong>Total Users:</strong> {total_users}</p>
+                                <p><strong>Premium Users:</strong> {premium_count}</p>
+                            </div>
+                            
+                            <p style="margin-top: 30px;">
+                                <a href="https://t.me/{BOT_USERNAME}" target="_blank">
+                                    Contact the bot on Telegram
+                                </a>
+                            </p>
+                        </div>
+                    </body>
+                    </html>
+                    """
+                    content_type = "text/html"
+                
+                response = response_text.encode('utf-8')
+                self.send_response(200)
+                self.send_header('Content-type', content_type)
+                self.send_header('Content-Length', str(len(response)))
+                self.end_headers()
+                self.wfile.write(response)
+                
+                duration = (time.time() - start_time) * 1000
+                logger.info(f"Health check passed - 200 OK - {duration:.2f}ms")
+            else:
+                self.send_response(404)
+                self.send_header('Content-type', 'text/plain')
+                self.end_headers()
+                self.wfile.write(b'404 Not Found')
+                logger.warning(f"Invalid path requested: {self.path}")
+                
+        except Exception as e:
+            logger.error(f"Health check error: {e}")
+            self.send_response(500)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'500 Internal Server Error')
+
+    def log_message(self, format, *args):
+        """Override to prevent default logging"""
+        pass
 
 def run_http_server(port=8080):
-    # ... existing HTTP server implementation ...
+    try:
+        server_address = ('0.0.0.0', port)
+        httpd = HTTPServer(server_address, HealthCheckHandler)
+        httpd.start_time = time.time()
+        
+        logger.info(f"HTTP server running on port {port}")
+        httpd.serve_forever()
+    except Exception as e:
+        logger.critical(f"Failed to start HTTP server: {e}")
+        time.sleep(5)
+        run_http_server(port)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # ... existing start command ...
+    user_id = update.effective_user.id
+    premium = is_premium(user_id)
+    
+    welcome_msg = (
+        "🌟 *Welcome to Quiz Bot!* 🌟\n\n"
+        "I can turn your text files into interactive 10-second quizzes!\n\n"
+        "🔹 Use /createquiz - Start quiz creation\n"
+        "🔹 Use /help - Show formatting guide\n"
+        "🔹 Use /about - Bot information\n\n"
+    )
+    
+    if premium:
+        sub = premium_subscriptions.find_one({'user_id': user_id})
+        expires = sub['expires_at'].strftime('%Y-%m-%d')
+        welcome_msg += f"🎉 *PREMIUM USER* (Expires: {expires}) 🎉\nNo limits!\n\n"
+    else:
+        welcome_msg += (
+            "ℹ️ *Free Account Limits:*\n"
+            f"- Max {FREE_USER_LIMIT} questions per {COOLDOWN_MINUTES} minutes\n"
+            "- Upgrade with /upgrade\n\n"
+        )
+    
+    welcome_msg += "🔹 Use /myplan - Check your premium status\n"
+    welcome_msg += "🔹 Use /plans - See available premium plans"
+    
+    contact_button = InlineKeyboardButton(
+        "Contact Owner", 
+        url=f"https://t.me/{OWNER_USERNAME}"
+    )
+    keyboard = [[contact_button]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        welcome_msg, 
+        parse_mode='Markdown',
+        reply_markup=reply_markup
+    )
 
 async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # ... existing about command ...
+    """Show bot information"""
+    try:
+        about_text = (
+            f"🤖 *Quiz Bot Pro*\n"
+            f"*Version*: 2.0 (MongoDB Edition)\n"
+            f"*Creator*: [Rahul](https://t.me/{OWNER_USERNAME})\n\n"
+            "✨ *Features*:\n"
+            "- Create quizzes from text files\n"
+            "- Premium subscriptions\n"
+            "- 10-second timed polls\n\n"
+            f"📣 *Support*: @{OWNER_USERNAME}\n"
+            "📂 *Source*: github.com/your-repo"
+        )
+        
+        contact_button = InlineKeyboardButton(
+            "Contact Owner", 
+            url=f"https://t.me/{OWNER_USERNAME}"
+        )
+        keyboard = [[contact_button]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            about_text, 
+            parse_mode='Markdown',
+            reply_markup=reply_markup,
+            disable_web_page_preview=True
+        )
+    except Exception as e:
+        logger.error(f"Error in about_command: {e}")
+        await update.message.reply_text("⚠️ An error occurred. Please try again later.")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
@@ -158,8 +329,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         help_text += (
             "👑 *Owner Commands:*\n"
             "/stats - Show bot statistics\n"
-            "/add <user_id> <duration> - Grant premium\n"  # Updated command
-            "/rem <user_id> - Revoke premium\n"  # Updated command
+            "/add <user_id> <duration> - Grant premium\n"
+            "/rem <user_id> - Revoke premium\n"
             "/broadcast <message> - Broadcast to all users\n"
             "/setplan <name> <duration> <price> - Create premium plan\n"
         )
@@ -169,7 +340,36 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     
     await update.message.reply_text(help_text, parse_mode='Markdown')
 
-# ====================== UPDATED COMMANDS WITH IST TIME AND NEW NAMES ======================
+async def create_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    premium = is_premium(user_id)
+    user = get_user_data(user_id)
+    
+    if not premium:
+        current_time = time.time()
+        last_time = user.get('last_quiz_time', 0)
+        time_diff = (current_time - last_time) / 60
+        
+        if time_diff >= COOLDOWN_MINUTES:
+            update_user_data(user_id, {'quiz_count': 0, 'last_quiz_time': current_time})
+            user['quiz_count'] = 0
+        
+        if user['quiz_count'] >= FREE_USER_LIMIT:
+            remaining_time = COOLDOWN_MINUTES - int(time_diff)
+            await update.message.reply_text(
+                f"⏳ You've reached your free limit of {FREE_USER_LIMIT} questions.\n"
+                f"Please wait {remaining_time} minutes or upgrade to /upgrade",
+                parse_mode='Markdown'
+            )
+            return
+    
+    await update.message.reply_text(
+        "📤 *Ready to create your quiz!*\n\n"
+        "Please send me a .txt file containing your questions.\n\n"
+        "Need format help? Use /help",
+        parse_mode='Markdown'
+    )
+
 async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Add premium subscription (owner only) - renamed from addpremium_command"""
     user_id = update.effective_user.id
@@ -264,7 +464,46 @@ async def rem_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
 async def upgrade_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # ... existing upgrade command ...
+    user_id = update.effective_user.id
+    premium = is_premium(user_id)
+    
+    if premium:
+        sub = premium_subscriptions.find_one({'user_id': user_id})
+        expires = sub['expires_at'].strftime('%d-%m-%Y')
+        await update.message.reply_text(
+            f"🎉 You're a premium user! (Expires: {expires})\n"
+            "Enjoy unlimited quiz generation!\n\n"
+            "🔹 Use /myplan to see full details",
+            parse_mode='Markdown'
+        )
+    else:
+        all_plans = list(plans.find({}))
+        
+        if all_plans:
+            plans_text = "\n\n📋 *Available Plans:*\n"
+            for plan in all_plans:
+                plans_text += f"• {plan['plan_name']}: {plan['duration']} - {plan['price']}\n"
+        else:
+            plans_text = ""
+        
+        contact_button = InlineKeyboardButton(
+            "Contact Owner", 
+            url=f"https://t.me/{OWNER_USERNAME}"
+        )
+        keyboard = [[contact_button]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            "🌟 *Upgrade to Premium!*\n\n"
+            "Enjoy these benefits:\n"
+            "✅ Unlimited quiz generation\n"
+            "✅ No cooldown periods\n"
+            "✅ Priority support\n\n"
+            f"Use /plans to see available options{plans_text}\n\n"
+            "Contact the owner to purchase:",
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
@@ -294,15 +533,136 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"• Active Today: `{active_today}`\n"
         f"• Free Quizzes Generated: `{total_quiz_count}`\n\n"
         "👑 Owner Commands:\n"
-        "`/add <user_id> <duration>` - Add premium\n"  # Updated
-        "`/rem <user_id>` - Remove premium\n"  # Updated
+        "`/add <user_id> <duration>` - Add premium\n"
+        "`/rem <user_id>` - Remove premium\n"
         "`/broadcast <message>` - Broadcast to all users\n"
         "`/setplan <name> <duration> <price>` - Create premium plan"
     )
     
     await update.message.reply_text(stats_msg, parse_mode='Markdown')
 
-# ... existing parse_quiz_file and handle_document functions ...
+def parse_quiz_file(content: str) -> tuple:
+    blocks = [b.strip() for b in content.split('\n\n') if b.strip()]
+    valid_questions = []
+    errors = []
+    
+    for i, block in enumerate(blocks, 1):
+        lines = [line.strip() for line in block.split('\n') if line.strip()]
+        
+        if len(lines) not in (6, 7):
+            errors.append(f"❌ Question {i}: Invalid line count ({len(lines)}), expected 6 or 7")
+            continue
+            
+        question = lines[0]
+        options = lines[1:5]
+        answer_line = lines[5]
+        
+        explanation = lines[6] if len(lines) == 7 else None
+        
+        answer_error = None
+        if not answer_line.lower().startswith('answer:'):
+            answer_error = "Missing 'Answer:' prefix"
+        else:
+            try:
+                answer_num = int(answer_line.split(':')[1].strip())
+                if not 1 <= answer_num <= 4:
+                    answer_error = f"Invalid answer number {answer_num}"
+            except (ValueError, IndexError):
+                answer_error = "Malformed answer line"
+        
+        if answer_error:
+            errors.append(f"❌ Q{i}: {answer_error}")
+        else:
+            option_texts = options
+            correct_id = int(answer_line.split(':')[1].strip()) - 1
+            valid_questions.append((question, option_texts, correct_id, explanation))
+    
+    return valid_questions, errors
+
+async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    premium = is_premium(user_id)
+    user = get_user_data(user_id)
+    
+    if not update.message.document.file_name.endswith('.txt'):
+        await update.message.reply_text("❌ Please send a .txt file")
+        return
+    
+    try:
+        file = await context.bot.get_file(update.message.document.file_id)
+        await file.download_to_drive('quiz.txt')
+        
+        with open('quiz.txt', 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        valid_questions, errors = parse_quiz_file(content)
+        question_count = len(valid_questions)
+        
+        if not premium:
+            current_time = time.time()
+            last_time = user.get('last_quiz_time', 0)
+            time_diff = (current_time - last_time) / 60
+            
+            if time_diff >= COOLDOWN_MINUTES:
+                update_user_data(user_id, {'quiz_count': 0, 'last_quiz_time': current_time})
+                user['quiz_count'] = 0
+            
+            if user['quiz_count'] + question_count > FREE_USER_LIMIT:
+                remaining = FREE_USER_LIMIT - user['quiz_count']
+                await update.message.reply_text(
+                    f"⚠️ You can only create {remaining} more questions in this period.\n"
+                    f"Upgrade to /upgrade for unlimited access.",
+                    parse_mode='Markdown'
+                )
+                return
+            
+            new_count = user['quiz_count'] + question_count
+            update_user_data(user_id, {
+                'quiz_count': new_count,
+                'last_quiz_time': current_time
+            })
+        
+        if errors:
+            error_msg = "\n".join(errors[:5])
+            if len(errors) > 5:
+                error_msg += f"\n\n...and {len(errors)-5} more errors"
+            await update.message.reply_text(
+                f"⚠️ Found {len(errors)} error(s):\n\n{error_msg}"
+            )
+        
+        if valid_questions:
+            status_msg = f"✅ Sending {len(valid_questions)} quiz question(s)..."
+            if not premium:
+                remaining = FREE_USER_LIMIT - (user['quiz_count'] if 'quiz_count' in user else 0)
+                status_msg += f"\n\nℹ️ Free questions left: {remaining}"
+            
+            await update.message.reply_text(status_msg)
+            
+            for question, options, correct_id, explanation in valid_questions:
+                try:
+                    poll_params = {
+                        "chat_id": update.effective_chat.id,
+                        "question": question,
+                        "options": options,
+                        "type": 'quiz',
+                        "correct_option_id": correct_id,
+                        "is_anonymous": False,
+                        "open_period": 10
+                    }
+                    
+                    if explanation:
+                        poll_params["explanation"] = explanation
+                    
+                    await context.bot.send_poll(**poll_params)
+                except Exception as e:
+                    logger.error(f"Poll send error: {str(e)}")
+                    await update.message.reply_text("⚠️ Failed to send one quiz. Continuing...")
+        else:
+            await update.message.reply_text("❌ No valid questions found in file")
+            
+    except Exception as e:
+        logger.error(f"File processing error: {str(e)}")
+        await update.message.reply_text("⚠️ Error processing file. Please check format and try again.")
 
 async def myplan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
@@ -355,7 +715,178 @@ async def myplan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             reply_markup=reply_markup
         )
 
-# ... existing plans_command, set_plan_command, broadcast_command, broadcast_button ...
+async def plans_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show available premium plans"""
+    try:
+        all_plans = list(plans.find({}))
+        
+        if not all_plans:
+            await update.message.reply_text("ℹ️ No plans available yet. Contact owner.")
+            return
+        
+        plans_text = "🌟 *Available Premium Plans* 🌟\n\n"
+        for plan in all_plans:
+            plans_text += (
+                f"• *{plan['plan_name']}*\n"
+                f"  Duration: {plan['duration']}\n"
+                f"  Price: {plan['price']}\n\n"
+            )
+        
+        contact_button = InlineKeyboardButton(
+            "Contact Owner", 
+            url=f"https://t.me/{OWNER_USERNAME}"
+        )
+        keyboard = [[contact_button]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        plans_text += "To purchase, contact the owner:"
+        
+        await update.message.reply_text(
+            plans_text,
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
+    except Exception as e:
+        logger.error(f"Error in plans_command: {e}")
+        await update.message.reply_text("⚠️ An error occurred. Please try again later.")
+
+async def set_plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Set premium plans (owner only)"""
+    try:
+        user_id = update.effective_user.id
+        
+        if user_id != OWNER_ID:
+            await update.message.reply_text("❌ Owner only command!")
+            return
+        
+        if len(context.args) < 3:
+            await update.message.reply_text(
+                "ℹ️ Usage: /setplan <plan_name> <duration> <price>\n"
+                "Example: /setplan Basic \"30 days\" $5\n"
+                "Example: /setplan Pro \"1 year\" $30"
+            )
+            return
+        
+        plan_name = context.args[0]
+        duration = " ".join(context.args[1:-1])
+        price = context.args[-1]
+        
+        plans.update_one(
+            {'plan_name': plan_name},
+            {'$set': {
+                'duration': duration,
+                'price': price
+            }},
+            upsert=True
+        )
+        
+        await update.message.reply_text(
+            f"✅ Plan updated!\n\n"
+            f"*Plan Name*: {plan_name}\n"
+            f"*Duration*: {duration}\n"
+            f"*Price*: {price}",
+            parse_mode='Markdown'
+        )
+    except Exception as e:
+        logger.error(f"Error in set_plan_command: {e}")
+        await update.message.reply_text("⚠️ An error occurred. Please check your input and try again.")
+
+async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send message to all users (owner only)"""
+    try:
+        user_id = update.effective_user.id
+        
+        if user_id != OWNER_ID:
+            await update.message.reply_text("❌ Owner only command!")
+            return
+        
+        if not context.args:
+            await update.message.reply_text("ℹ️ Usage: /broadcast <message>")
+            return
+        
+        message = " ".join(context.args)
+        total_users = users.count_documents({})
+        
+        keyboard = [
+            [
+                InlineKeyboardButton("✅ Confirm", callback_data="broadcast_confirm"),
+                InlineKeyboardButton("❌ Cancel", callback_data="broadcast_cancel"),
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        context.user_data['broadcast_message'] = message
+        
+        await update.message.reply_text(
+            f"⚠️ *Broadcast Confirmation*\n\n"
+            f"Message:\n`{message}`\n\n"
+            f"Recipients: {total_users} users\n\n"
+            "Are you sure you want to send?",
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
+    except Exception as e:
+        logger.error(f"Error in broadcast_command: {e}")
+        await update.message.reply_text("⚠️ An error occurred. Please try again later.")
+
+async def broadcast_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle broadcast confirmation button"""
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        if query.data == "broadcast_cancel":
+            await query.edit_message_text("🚫 Broadcast cancelled")
+            return
+        
+        message = context.user_data.get('broadcast_message', "")
+        if not message:
+            await query.edit_message_text("❌ Broadcast message missing")
+            return
+        
+        all_users = users.find({})
+        total = all_users.count()
+        success = 0
+        failed = 0
+        
+        progress_msg = await query.edit_message_text(
+            f"📤 Broadcasting to {total} users...\n0% complete"
+        )
+        
+        for idx, user in enumerate(all_users, 1):
+            try:
+                await context.bot.send_message(
+                    chat_id=user['user_id'],
+                    text=f"📣 *Broadcast Message*\n\n{message}",
+                    parse_mode='Markdown'
+                )
+                success += 1
+            except Exception as e:
+                logger.error(f"Broadcast to {user['user_id']} failed: {e}")
+                failed += 1
+            
+            if idx % max(10, total//10) == 0 or idx == total:
+                percent = int((idx/total)*100)
+                try:
+                    await progress_msg.edit_text(
+                        f"📤 Broadcasting to {total} users...\n"
+                        f"{percent}% complete ({idx}/{total})\n"
+                        f"✅ Success: {success} ❌ Failed: {failed}"
+                    )
+                except:
+                    pass
+            
+            time.sleep(0.1)
+        
+        await progress_msg.edit_text(
+            f"✅ Broadcast complete!\n"
+            f"• Total recipients: {total}\n"
+            f"• Successfully sent: {success}\n"
+            f"• Failed: {failed}"
+        )
+    except Exception as e:
+        logger.error(f"Error in broadcast_button: {e}")
+        await query.edit_message_text("⚠️ An error occurred during broadcast.")
 
 def main() -> None:
     PORT = int(os.environ.get('PORT', 10000))
