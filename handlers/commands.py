@@ -17,95 +17,101 @@ from utils.helpers import COOLDOWN_MINUTES, FREE_USER_LIMIT
 OWNER_ID = int(os.getenv('OWNER_ID', 0))
 BOT_USERNAME = os.getenv('BOT_USERNAME', 'your_bot')
 
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def myplan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
     premium = is_premium(user_id)
     
-    welcome_msg = (
-        "🌟 *Welcome to Quiz Bot!* 🌟\n\n"
-        "I can turn your text files into interactive 10-second quizzes!\n\n"
-        "🔹 Use /createquiz - Start quiz creation\n"
-        "🔹 Use /help - Show formatting guide\n"
-        "🔹 Use /about - Bot information\n\n"
+    if not premium:
+        await update.message.reply_text("ℹ️ You don't have an active premium subscription")
+        return
+    
+    # Get subscription details
+    sub = premium_subscriptions.find_one({'user_id': user_id})
+    if not sub:
+        await update.message.reply_text("❌ Premium details not found")
+        return
+    
+    # Format dates
+    now = datetime.utcnow()
+    join_date = sub['created_at'].strftime("%d-%m-%Y")
+    join_time = sub['created_at'].strftime("%I:%M:%S %p")
+    expiry_date = sub['expires_at'].strftime("%d-%m-%Y")
+    expiry_time = sub['expires_at'].strftime("%I:%M:%S %p")
+    
+    # Calculate remaining days
+    remaining_days = (sub['expires_at'] - now).days
+    
+    # Format message
+    message = (
+        f"👋 ʜᴇʏ {update.effective_user.first_name},\n"
+        f"🌟 *Your Premium Plan* 🌟\n\n"
+        f"⏰ ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇꜱꜱ : {remaining_days} days remaining\n"
+        f"⏳ ᴊᴏɪɴɪɴɢ ᴅᴀᴛᴇ : {join_date}\n"
+        f"⏱️ ᴊᴏɪɴɪɴɢ ᴛɪᴍᴇ : {join_time}\n\n"
+        f"⌛️ ᴇxᴘɪʀʏ ᴅᴀᴛᴇ : {expiry_date}\n"
+        f"⏱️ ᴇxᴘɪʀʏ ᴛɪᴍᴇ : {expiry_time}"
     )
     
-    if premium:
-        # Get expiration date
-        sub = premium_subscriptions.find_one({'user_id': user_id})
-        expires = sub['expires_at'].strftime('%Y-%m-%d')
-        welcome_msg += f"🎉 *PREMIUM USER* (Expires: {expires}) 🎉\nNo limits!\n\n"
-    else:
-        welcome_msg += (
-            "ℹ️ *Free Account Limits:*\n"
-            f"- Max {FREE_USER_LIMIT} questions per {COOLDOWN_MINUTES} minutes\n"
-            "- Upgrade with /upgrade\n\n"
-        )
-    
-    await update.message.reply_text(welcome_msg, parse_mode='Markdown')
+    await update.message.reply_text(message, parse_mode='Markdown')
 
-async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    about_text = (
-        "🤖 *Quiz Bot Pro*\n"
-        "*Version*: 2.0 (MongoDB Edition)\n"
-        "*Creator*: @YourUsername\n\n"
-        "✨ *Features*:\n"
-        "- Create quizzes from text files\n"
-        "- Premium subscriptions\n"
-        "- 10-second timed polls\n\n"
-        "📣 *Support*: @YourSupportChannel\n"
-        "📂 *Source*: github.com/your-repo"
-    )
-    await update.message.reply_text(about_text, parse_mode='Markdown')
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def add_premium_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
-    is_owner = user_id == OWNER_ID
-    premium = is_premium(user_id)
     
-    help_text = (
-        "📝 *Quiz File Format Guide:*\n\n"
-        "```\n"
-        "What is 2+2?\n"
-        "A) 3\n"
-        "B) 4\n"
-        "C) 5\n"
-        "D) 6\n"
-        "Answer: 2\n"
-        "The correct answer is 4\n\n"
-        "Python is a...\n"
-        "A. Snake\n"
-        "B. Programming language\n"
-        "C. Coffee brand\n"
-        "D. Movie\n"
-        "Answer: 2\n"
-        "```\n\n"
-        "📌 *Rules:*\n"
-        "• One question per block (separated by blank lines)\n"
-        "• Exactly 4 options (any prefix format accepted)\n"
-        "• Answer format: 'Answer: <1-4>' (1=first option, 2=second, etc.)\n"
-        "• Optional 7th line for explanation (any text)\n\n"
-    )
+    if user_id != OWNER_ID:
+        await update.message.reply_text("❌ Owner only command!")
+        return
     
-    # Add premium info
-    if premium:
-        help_text += "🎉 *Premium Status:* Active (No limits)\n\n"
-    else:
-        help_text += (
-            "ℹ️ *Free Account Limits:*\n"
-            f"- Max {FREE_USER_LIMIT} questions per {COOLDOWN_MINUTES} minutes\n"
-            "- Remove limits with /upgrade\n\n"
+    if len(context.args) < 2:
+        await update.message.reply_text("ℹ️ Usage: /addpremium <user_id> <duration>\nExample: /addpremium 123456 30day")
+        return
+    
+    try:
+        target_id = int(context.args[0])
+        duration = " ".join(context.args[1:])
+        expires_at = add_premium_subscription(target_id, duration)
+        
+        # Get current datetime
+        now = datetime.utcnow()
+        join_date = now.strftime("%d-%m-%Y")
+        join_time = now.strftime("%I:%M:%S %p")
+        expiry_date = expires_at.strftime("%d-%m-%Y")
+        expiry_time = expires_at.strftime("%I:%M:%S %p")
+        
+        # Calculate duration in days
+        duration_days = (expires_at - now).days
+        
+        # Format user message
+        user_msg = (
+            f"👋 ʜᴇʏ user,\n"
+            f"ᴛʜᴀɴᴋ ʏᴏᴜ ꜰᴏʀ ᴘᴜʀᴄʜᴀꜱɪɴɢ ᴘʀᴇᴍɪᴜᴍ.\n"
+            f"ᴇɴᴊᴏʏ !! ✨🎉\n\n"
+            f"⏰ ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇꜱꜱ : {duration_days} day\n"
+            f"⏳ ᴊᴏɪɴɪɴɢ ᴅᴀᴛᴇ : {join_date}\n"
+            f"⏱️ ᴊᴏɪɴɪɴɢ ᴛɪᴍᴇ : {join_time}\n\n"
+            f"⌛️ ᴇxᴘɪʀʏ ᴅᴀᴛᴇ : {expiry_date}\n"
+            f"⏱️ ᴇxᴘɪʀʏ ᴛɪᴍᴇ : {expiry_time}"
         )
-    
-    # Add owner commands
-    if is_owner:
-        help_text += (
-            "👑 *Owner Commands:*\n"
-            "/stats - Show bot statistics\n"
-            "/addpremium <user_id> <duration> - Grant premium\n"
-            "/removepremium <user_id> - Revoke premium\n"
+        
+        # Try to send to user
+        try:
+            await context.bot.send_message(chat_id=target_id, text=user_msg)
+        except Exception as e:
+            logger.error(f"Failed to notify user: {e}")
+        
+        # Send confirmation to owner
+        owner_msg = (
+            f"✅ Premium added for user {target_id}\n"
+            f"Expires: {expiry_date} at {expiry_time}\n\n"
+            "User notification:\n"
+            f"{user_msg}"
         )
-    
-    await update.message.reply_text(help_text, parse_mode='Markdown')
+        await update.message.reply_text(owner_msg)
+        
+    except Exception as e:
+        logger.error(f"Premium add error: {e}")
+        await update.message.reply_text(f"❌ Error: {str(e)}")
+
+# [Keep all other existing command functions unchanged]    await update.message.reply_text(help_text, parse_mode='Markdown')
 
 async def create_quiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
