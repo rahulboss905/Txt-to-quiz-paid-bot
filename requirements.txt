@@ -1,0 +1,2 @@
+# Updated: 2025-08-02 - force v20.3
+python-telegram-bot==20.3
