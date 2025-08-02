@@ -255,12 +255,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         reply_markup=reply_markup
     )
 
+# ====================== FIXED ABOUT COMMAND ======================
 async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show bot information"""
+    """Show bot information - FIXED MARKDOWN"""
     try:
+        # Using safe Markdown formatting without complex structures
         about_text = (
-            f"🤖 *Quiz Bot Pro*\n"
-            f"*Version*: 2.0 (MongoDB Edition)\n"
+            "🤖 *Quiz Bot Pro*\n"
+            "*Version*: 2.0 (MongoDB Edition)\n"
             f"*Creator*: [Rahul](https://t.me/{OWNER_USERNAME})\n\n"
             "✨ *Features*:\n"
             "- Create quizzes from text files\n"
@@ -277,9 +279,9 @@ async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         keyboard = [[contact_button]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
+        # Sending without Markdown to avoid formatting issues
         await update.message.reply_text(
             about_text, 
-            parse_mode='Markdown',
             reply_markup=reply_markup,
             disable_web_page_preview=True
         )
@@ -371,7 +373,7 @@ async def create_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     )
 
 async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Add premium subscription (owner only) - renamed from addpremium_command"""
+    """Add premium subscription (owner only)"""
     user_id = update.effective_user.id
     
     if user_id != OWNER_ID:
@@ -424,7 +426,7 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
 async def rem_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Remove premium subscription (owner only) - renamed from removepremium_command"""
+    """Remove premium subscription (owner only)"""
     user_id = update.effective_user.id
     
     if user_id != OWNER_ID:
@@ -715,23 +717,42 @@ async def myplan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             reply_markup=reply_markup
         )
 
+# ====================== FIXED PLANS COMMAND ======================
 async def plans_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show available premium plans"""
+    """Show available premium plans - FIXED DATABASE ACCESS"""
     try:
-        all_plans = list(plans.find({}))
+        # Safely access the plans collection
+        all_plans = list(plans.find({})) if plans else []
         
         if not all_plans:
-            await update.message.reply_text("ℹ️ No plans available yet. Contact owner.")
+            # Create contact button
+            contact_button = InlineKeyboardButton(
+                "Contact Owner", 
+                url=f"https://t.me/{OWNER_USERNAME}"
+            )
+            keyboard = [[contact_button]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.message.reply_text(
+                "ℹ️ No plans available yet. Contact owner for premium options.",
+                reply_markup=reply_markup
+            )
             return
         
+        # Build plans text
         plans_text = "🌟 *Available Premium Plans* 🌟\n\n"
         for plan in all_plans:
+            plan_name = plan.get('plan_name', 'Unknown Plan')
+            duration = plan.get('duration', 'Unknown Duration')
+            price = plan.get('price', 'Unknown Price')
+            
             plans_text += (
-                f"• *{plan['plan_name']}*\n"
-                f"  Duration: {plan['duration']}\n"
-                f"  Price: {plan['price']}\n\n"
+                f"• *{plan_name}*\n"
+                f"  Duration: {duration}\n"
+                f"  Price: {price}\n\n"
             )
         
+        # Create contact button
         contact_button = InlineKeyboardButton(
             "Contact Owner", 
             url=f"https://t.me/{OWNER_USERNAME}"
@@ -741,9 +762,9 @@ async def plans_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         
         plans_text += "To purchase, contact the owner:"
         
+        # Send without Markdown to avoid formatting issues
         await update.message.reply_text(
             plans_text,
-            parse_mode='Markdown',
             reply_markup=reply_markup
         )
     except Exception as e:
@@ -771,6 +792,7 @@ async def set_plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         duration = " ".join(context.args[1:-1])
         price = context.args[-1]
         
+        # Update plans collection
         plans.update_one(
             {'plan_name': plan_name},
             {'$set': {
@@ -782,10 +804,9 @@ async def set_plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         
         await update.message.reply_text(
             f"✅ Plan updated!\n\n"
-            f"*Plan Name*: {plan_name}\n"
-            f"*Duration*: {duration}\n"
-            f"*Price*: {price}",
-            parse_mode='Markdown'
+            f"Plan Name: {plan_name}\n"
+            f"Duration: {duration}\n"
+            f"Price: {price}"
         )
     except Exception as e:
         logger.error(f"Error in set_plan_command: {e}")
@@ -818,11 +839,10 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         context.user_data['broadcast_message'] = message
         
         await update.message.reply_text(
-            f"⚠️ *Broadcast Confirmation*\n\n"
-            f"Message:\n`{message}`\n\n"
+            f"⚠️ Broadcast Confirmation\n\n"
+            f"Message:\n{message}\n\n"
             f"Recipients: {total_users} users\n\n"
             "Are you sure you want to send?",
-            parse_mode='Markdown',
             reply_markup=reply_markup
         )
     except Exception as e:
@@ -857,8 +877,7 @@ async def broadcast_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             try:
                 await context.bot.send_message(
                     chat_id=user['user_id'],
-                    text=f"📣 *Broadcast Message*\n\n{message}",
-                    parse_mode='Markdown'
+                    text=f"📣 Broadcast Message\n\n{message}"
                 )
                 success += 1
             except Exception as e:
@@ -903,14 +922,14 @@ def main() -> None:
     
     application = Application.builder().token(TOKEN).build()
     
-    # Command handlers with updated command names
+    # Command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("about", about_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("createquiz", create_quiz))
     application.add_handler(CommandHandler("stats", stats_command))
-    application.add_handler(CommandHandler("add", add_command))  # Updated command name
-    application.add_handler(CommandHandler("rem", rem_command))  # Updated command name
+    application.add_handler(CommandHandler("add", add_command))
+    application.add_handler(CommandHandler("rem", rem_command))
     application.add_handler(CommandHandler("upgrade", upgrade_command))
     application.add_handler(CommandHandler("myplan", myplan_command))
     application.add_handler(CommandHandler("plans", plans_command))
