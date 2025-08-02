@@ -251,6 +251,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             "- Upgrade with /upgrade\n\n"
         )
     
+    # Add myplan command info
+    welcome_msg += "🔹 Use /myplan - Check your premium status"
+    
     await update.message.reply_text(welcome_msg, parse_mode='Markdown')
 
 async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -317,6 +320,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "/removepremium <user_id> - Revoke premium\n"
         )
     
+    # Add myplan command
+    help_text += "🔹 Use /myplan - Check your premium status"
+    
     await update.message.reply_text(help_text, parse_mode='Markdown')
 
 async def create_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -354,7 +360,7 @@ async def create_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     )
 
 async def add_premium_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Add premium subscription (owner only)"""
+    """Add premium subscription (owner only) with notifications"""
     user_id = update.effective_user.id
     
     if user_id != OWNER_ID:
@@ -370,16 +376,47 @@ async def add_premium_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         duration = " ".join(context.args[1:])
         expires_at = add_premium_subscription(target_id, duration)
         
-        await update.message.reply_text(
-            f"✅ Premium added for user {target_id}\n"
-            f"Expires: {expires_at.strftime('%Y-%m-%d')}"
+        # Format dates for messages
+        now = datetime.utcnow()
+        join_date = now.strftime('%d-%m-%Y')
+        join_time = now.strftime('%I:%M:%S %p').lstrip('0')
+        expire_date = expires_at.strftime('%d-%m-%Y')
+        expire_time = expires_at.strftime('%I:%M:%S %p').lstrip('0')
+        duration_days = (expires_at - now).days
+        
+        # Create notification message
+        premium_msg = (
+            f"👋 ʜᴇʏ,\n"
+            f"ᴛʜᴀɴᴋ ʏᴏᴜ ꜰᴏʀ ᴘᴜʀᴄʜᴀꜱɪɴɢ ᴘʀᴇᴍɪᴜᴍ.\n"
+            f"ᴇɴᴊᴏʏ !! ✨🎉\n\n"
+            f"⏰ ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇꜱꜱ : {duration_days} day\n"
+            f"⏳ ᴊᴏɪɴɪɴɢ ᴅᴀᴛᴇ : {join_date}\n"
+            f"⏱️ ᴊᴏɪɴɪɴɢ ᴛɪᴍᴇ : {join_time}\n\n"
+            f"⌛️ ᴇxᴘɪʀʏ ᴅᴀᴛᴇ : {expire_date}\n"
+            f"⏱️ ᴇxᴘɪʀʏ ᴛɪᴍᴇ : {expire_time}\n"
         )
+        
+        # Send to user
+        try:
+            await context.bot.send_message(chat_id=target_id, text=premium_msg)
+        except Exception as e:
+            logger.warning(f"Couldn't notify user {target_id}: {e}")
+            await update.message.reply_text(f"⚠️ Couldn't notify user: {e}")
+        
+        # Send to owner
+        owner_msg = (
+            f"✅ Premium added for user {target_id}\n"
+            f"Expires: {expire_date}\n\n"
+            f"Sent this to user:\n\n{premium_msg}"
+        )
+        await update.message.reply_text(owner_msg)
+        
     except Exception as e:
         logger.error(f"Premium add error: {e}")
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
 async def remove_premium_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Remove premium subscription (owner only)"""
+    """Remove premium subscription (owner only) with notifications"""
     user_id = update.effective_user.id
     
     if user_id != OWNER_ID:
@@ -395,7 +432,26 @@ async def remove_premium_command(update: Update, context: ContextTypes.DEFAULT_T
         result = premium_subscriptions.delete_one({'user_id': target_id})
         
         if result.deleted_count > 0:
-            await update.message.reply_text(f"✅ Premium removed for user {target_id}")
+            # Create removal message
+            removal_msg = (
+                "👋 ʜᴇʏ,\n\n"
+                "Your premium subscription has been removed.\n"
+                "If you have any questions, contact support."
+            )
+            
+            # Send to user
+            try:
+                await context.bot.send_message(chat_id=target_id, text=removal_msg)
+            except Exception as e:
+                logger.warning(f"Couldn't notify user {target_id}: {e}")
+                await update.message.reply_text(f"⚠️ Couldn't notify user: {e}")
+            
+            # Send to owner
+            owner_msg = (
+                f"✅ Premium removed for user {target_id}\n\n"
+                f"Sent this to user:\n\n{removal_msg}"
+            )
+            await update.message.reply_text(owner_msg)
         else:
             await update.message.reply_text("ℹ️ User has no active premium")
     except Exception as e:
@@ -409,10 +465,11 @@ async def upgrade_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     if premium:
         sub = premium_subscriptions.find_one({'user_id': user_id})
-        expires = sub['expires_at'].strftime('%Y-%m-%d')
+        expires = sub['expires_at'].strftime('%d-%m-%Y')
         await update.message.reply_text(
             f"🎉 You're a premium user! (Expires: {expires})\n"
-            "Enjoy unlimited quiz generation!",
+            "Enjoy unlimited quiz generation!\n\n"
+            "🔹 Use /myplan to see full details",
             parse_mode='Markdown'
         )
     else:
@@ -604,6 +661,47 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         logger.error(f"File processing error: {str(e)}")
         await update.message.reply_text("⚠️ Error processing file. Please check format and try again.")
 
+async def myplan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show user's premium plan details"""
+    user_id = update.effective_user.id
+    premium = is_premium(user_id)
+    
+    if premium:
+        sub = premium_subscriptions.find_one({'user_id': user_id})
+        expires_at = sub['expires_at']
+        
+        # Format dates
+        expire_date = expires_at.strftime('%d-%m-%Y')
+        expire_time = expires_at.strftime('%I:%M:%S %p').lstrip('0')
+        remaining_days = (expires_at - datetime.utcnow()).days
+        
+        # Get join date
+        join_date = expires_at - timedelta(days=remaining_days)
+        join_date_str = join_date.strftime('%d-%m-%Y')
+        join_time_str = join_date.strftime('%I:%M:%S %p').lstrip('0')
+        
+        message = (
+            "🌟 *Your Premium Plan* 🌟\n\n"
+            f"👋 ʜᴇʏ,\n"
+            f"ᴛʜᴀɴᴋ ʏᴏᴜ ꜰᴏʀ ᴘᴜʀᴄʜᴀꜱɪɴɢ ᴘʀᴇᴍɪᴜᴍ.\n"
+            f"ᴇɴᴊᴏʏ !! ✨🎉\n\n"
+            f"⏰ ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇꜱꜱ : {remaining_days} day\n"
+            f"⏳ ᴊᴏɪɴɪɴɢ ᴅᴀᴛᴇ : {join_date_str}\n"
+            f"⏱️ ᴊᴏɪɴɪɴɢ ᴛɪᴍᴇ : {join_time_str}\n\n"
+            f"⌛️ ᴇxᴘɪʀʏ ᴅᴀᴛᴇ : {expire_date}\n"
+            f"⏱️ ᴇxᴘɪʀʏ ᴛɪᴍᴇ : {expire_time}\n"
+        )
+    else:
+        message = (
+            "ℹ️ You do not have an active premium plan.\n\n"
+            "Use /upgrade to learn about premium benefits:\n"
+            "✅ Unlimited quiz generation\n"
+            "✅ No cooldown periods\n"
+            "✅ Priority support"
+        )
+    
+    await update.message.reply_text(message, parse_mode='Markdown')
+
 def main() -> None:
     """Run the bot and HTTP server"""
     # Get port from environment (Render provides this)
@@ -633,6 +731,7 @@ def main() -> None:
     application.add_handler(CommandHandler("addpremium", add_premium_command))
     application.add_handler(CommandHandler("removepremium", remove_premium_command))
     application.add_handler(CommandHandler("upgrade", upgrade_command))
+    application.add_handler(CommandHandler("myplan", myplan_command))  # NEW COMMAND
     application.add_handler(MessageHandler(filters.Document.TEXT, handle_document))
     
     # Start polling
