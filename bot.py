@@ -47,6 +47,9 @@ premium_subscriptions.create_index('expires_at', expireAfterSeconds=0)
 OWNER_ID = int(os.getenv('OWNER_ID', 0))
 BOT_USERNAME = os.getenv('BOT_USERNAME', 'your_bot')
 
+# Log owner ID at startup
+logger.info(f"Owner ID: {OWNER_ID}")
+
 # Helper functions
 def get_user_data(user_id: int) -> dict:
     """Get or create user data"""
@@ -246,8 +249,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if premium:
         # Get expiration date
         sub = premium_subscriptions.find_one({'user_id': user_id})
-        expires = sub['expires_at'].strftime('%Y-%m-%d')
-        welcome_msg += f"🎉 *PREMIUM USER* (Expires: {expires}) 🎉\nNo limits!\n\n"
+        if sub:
+            expires = sub['expires_at'].strftime('%Y-%m-%d')
+            welcome_msg += f"🎉 *PREMIUM USER* (Expires: {expires}) 🎉\nNo limits!\n\n"
+        else:
+            welcome_msg += "🎉 *PREMIUM USER* 🎉\nNo limits!\n\n"
     else:
         welcome_msg += (
             "ℹ️ *Free Account Limits:*\n"
@@ -369,8 +375,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     query = update.callback_query
     await query.answer()
     
-    user_id = query.from_user.id
-    
     if query.data == "premium_plans":
         await plan_command(update, context)
     elif query.data == "my_plan":
@@ -404,18 +408,21 @@ async def plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    if update.callback_query:
-        await update.callback_query.message.reply_text(
-            plan_message,
-            parse_mode='Markdown',
-            reply_markup=reply_markup
-        )
-    else:
-        await update.message.reply_text(
-            plan_message,
-            parse_mode='Markdown',
-            reply_markup=reply_markup
-        )
+    try:
+        if update.callback_query:
+            await update.callback_query.message.reply_text(
+                plan_message,
+                parse_mode='Markdown',
+                reply_markup=reply_markup
+            )
+        else:
+            await update.message.reply_text(
+                plan_message,
+                parse_mode='Markdown',
+                reply_markup=reply_markup
+            )
+    except Exception as e:
+        logger.error(f"Error in plan_command: {e}")
 
 async def create_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Initiate quiz creation process"""
@@ -484,7 +491,7 @@ async def add_premium_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"⏰ ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇꜱꜱ : {duration_days} day\n"
             f"⏳ ᴊᴏɪɴɪɴɢ ᴅᴀᴛᴇ : {join_date}\n"
             f"⏱️ ᴊᴏɪɴɪɴɢ ᴛɪᴍᴇ : {join_time}\n\n"
-            f"⌛️ ᴇxᴘɪʀʏ �ᴅᴀᴛᴇ : {expire_date}\n"
+            f"⌛️ ᴇxᴘɪʀʏ ᴅᴀᴛᴇ : {expire_date}\n"
             f"⏱️ ᴇxᴘɪʀʏ ᴛɪᴍᴇ : {expire_time}\n"
         )
         
@@ -557,13 +564,20 @@ async def upgrade_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     if premium:
         sub = premium_subscriptions.find_one({'user_id': user_id})
-        expires = sub['expires_at'].strftime('%d-%m-%Y')
-        await update.message.reply_text(
-            f"🎉 You're a premium user! (Expires: {expires})\n"
-            "Enjoy unlimited quiz generation!\n\n"
-            "🔹 Use /myplan to see full details",
-            parse_mode='Markdown'
-        )
+        if sub:
+            expires = sub['expires_at'].strftime('%d-%m-%Y')
+            await update.message.reply_text(
+                f"🎉 You're a premium user! (Expires: {expires})\n"
+                "Enjoy unlimited quiz generation!\n\n"
+                "🔹 Use /myplan to see full details",
+                parse_mode='Markdown'
+            )
+        else:
+            await update.message.reply_text(
+                "🎉 You're a premium user!\n"
+                "Enjoy unlimited quiz generation!",
+                parse_mode='Markdown'
+            )
     else:
         # Add contact button
         keyboard = [
@@ -590,37 +604,41 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text("❌ Owner only command!")
         return
     
-    # Get stats
-    total_users = users.count_documents({})
-    active_premium = premium_subscriptions.count_documents({
-        'expires_at': {'$gt': datetime.utcnow()}
-    })
-    
-    # Active today (last 24 hours)
-    active_today = users.count_documents({
-        'last_quiz_time': {'$gt': time.time() - 86400}
-    })
-    
-    # Free quizzes generated
-    total_quizzes = users.aggregate([
-        {'$group': {'_id': None, 'total': {'$sum': '$quiz_count'}}}
-    ])
-    total_quiz_count = next(total_quizzes, {}).get('total', 0)
-    
-    stats_msg = (
-        "📊 *Bot Statistics*\n\n"
-        f"• Total Users: `{total_users}`\n"
-        f"• Active Premium: `{active_premium}`\n"
-        f"• Active Today: `{active_today}`\n"
-        f"• Free Quizzes Generated: `{total_quiz_count}`\n\n"
-        "👑 Owner Commands:\n"
-        "`/addpremium <user_id> <duration>` - Add premium\n"
-        "`/removepremium <user_id>` - Remove premium\n"
-        "`/broadcast <message>` - Broadcast message\n"
-        "`/getinfo <user_id>` - Get user info"
-    )
-    
-    await update.message.reply_text(stats_msg, parse_mode='Markdown')
+    try:
+        # Get stats
+        total_users = users.count_documents({})
+        active_premium = premium_subscriptions.count_documents({
+            'expires_at': {'$gt': datetime.utcnow()}
+        })
+        
+        # Active today (last 24 hours)
+        active_today = users.count_documents({
+            'last_quiz_time': {'$gt': time.time() - 86400}
+        })
+        
+        # Free quizzes generated
+        total_quizzes = users.aggregate([
+            {'$group': {'_id': None, 'total': {'$sum': '$quiz_count'}}}
+        ])
+        total_quiz_count = next(total_quizzes, {}).get('total', 0)
+        
+        stats_msg = (
+            "📊 *Bot Statistics*\n\n"
+            f"• Total Users: `{total_users}`\n"
+            f"• Active Premium: `{active_premium}`\n"
+            f"• Active Today: `{active_today}`\n"
+            f"• Free Quizzes Generated: `{total_quiz_count}`\n\n"
+            "👑 Owner Commands:\n"
+            "`/addpremium <user_id> <duration>` - Add premium\n"
+            "`/removepremium <user_id>` - Remove premium\n"
+            "`/broadcast <message>` - Broadcast message\n"
+            "`/getinfo <user_id>` - Get user info"
+        )
+        
+        await update.message.reply_text(stats_msg, parse_mode='Markdown')
+    except Exception as e:
+        logger.error(f"Stats command error: {e}")
+        await update.message.reply_text(f"❌ Error retrieving stats: {str(e)}")
 
 def parse_quiz_file(content: str) -> tuple:
     """Parse and validate quiz content with flexible prefixes and full explanation"""
@@ -673,16 +691,17 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     user = get_user_data(user_id)
     
     # Check file type
-    if not update.message.document.file_name.endswith('.txt'):
+    if not update.message.document or not update.message.document.file_name.endswith('.txt'):
         await update.message.reply_text("❌ Please send a .txt file")
         return
     
     try:
         # Download file
         file = await context.bot.get_file(update.message.document.file_id)
-        await file.download_to_drive('quiz.txt')
+        file_path = f"quiz_{user_id}_{time.time()}.txt"
+        await file.download_to_drive(file_path)
         
-        with open('quiz.txt', 'r', encoding='utf-8') as f:
+        with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
         # Parse and validate
@@ -752,9 +771,15 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                         poll_params["explanation"] = explanation
                     
                     await context.bot.send_poll(**poll_params)
+                    time.sleep(1)  # Avoid rate limiting
                 except Exception as e:
                     logger.error(f"Poll send error: {str(e)}")
                     await update.message.reply_text("⚠️ Failed to send one quiz. Continuing...")
+            # Clean up file
+            try:
+                os.remove(file_path)
+            except:
+                pass
         else:
             await update.message.reply_text("❌ No valid questions found in file")
             
@@ -769,49 +794,52 @@ async def myplan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     if premium:
         sub = premium_subscriptions.find_one({'user_id': user_id})
-        expires_at = sub['expires_at']
-        
-        # Format dates
-        expire_date = expires_at.strftime('%d-%m-%Y')
-        expire_time = expires_at.strftime('%I:%M:%S %p').lstrip('0')
-        remaining_days = (expires_at - datetime.utcnow()).days
-        
-        # Get join date
-        join_date = expires_at - timedelta(days=remaining_days)
-        join_date_str = join_date.strftime('%d-%m-%Y')
-        join_time_str = join_date.strftime('%I:%M:%S %p').lstrip('0')
-        
-        message = (
-            "🌟 *Your Premium Plan* 🌟\n\n"
-            f"👋 ʜᴇʏ,\n"
-            f"ᴛʜᴀɴᴋ ʏᴏᴜ ꜰᴏʀ ᴘᴜʀᴄʜᴀꜱɪɴɢ ᴘʀᴇᴍɪᴜᴍ.\n"
-            f"ᴇɴᴊᴏʏ !! ✨🎉\n\n"
-            f"⏰ ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇꜱꜱ : {remaining_days} day\n"
-            f"⏳ ᴊᴏɪɴɪɴɢ ᴅᴀᴛᴇ : {join_date_str}\n"
-            f"⏱️ ᴊᴏɪɴɪɴɢ ᴛɪᴍᴇ : {join_time_str}\n\n"
-            f"⌛️ ᴇxᴘɪʀʏ ᴅᴀᴛᴇ : {expire_date}\n"
-            f"⏱️ ᴇxᴘɪʀʏ ᴛɪᴍᴇ : {expire_time}\n"
-        )
-        await update.message.reply_text(message, parse_mode='Markdown')
-    else:
-        # Add contact button
-        keyboard = [
-            [InlineKeyboardButton("💬 Contact Admin", url=f"https://t.me/{OWNER_USERNAME}")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        message = (
-            "ℹ️ You do not have an active premium plan.\n\n"
-            "Use /upgrade to learn about premium benefits:\n"
-            "✅ Unlimited quiz generation\n"
-            "✅ No cooldown periods\n"
-            "✅ Priority support"
-        )
-        await update.message.reply_text(
-            message, 
-            parse_mode='Markdown',
-            reply_markup=reply_markup
-        )
+        if sub:
+            expires_at = sub['expires_at']
+            
+            # Format dates
+            expire_date = expires_at.strftime('%d-%m-%Y')
+            expire_time = expires_at.strftime('%I:%M:%S %p').lstrip('0')
+            remaining_days = (expires_at - datetime.utcnow()).days
+            
+            # Get join date
+            join_date = expires_at - timedelta(days=remaining_days)
+            join_date_str = join_date.strftime('%d-%m-%Y')
+            join_time_str = join_date.strftime('%I:%M:%S %p').lstrip('0')
+            
+            message = (
+                "🌟 *Your Premium Plan* 🌟\n\n"
+                f"👋 ʜᴇʏ,\n"
+                f"ᴛʜᴀɴᴋ ʏᴏᴜ ꜰᴏʀ ᴘᴜʀᴄʜᴀꜱɪɴɢ ᴘʀᴇᴍɪᴜᴍ.\n"
+                f"ᴇɴᴊᴏʏ !! ✨🎉\n\n"
+                f"⏰ ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇꜱꜱ : {remaining_days} day\n"
+                f"⏳ ᴊᴏɪɴɪɴɢ ᴅᴀᴛᴇ : {join_date_str}\n"
+                f"⏱️ ᴊᴏɪɴɪɴɢ ᴛɪᴍᴇ : {join_time_str}\n\n"
+                f"⌛️ ᴇxᴘɪʀʏ ᴅᴀᴛᴇ : {expire_date}\n"
+                f"⏱️ ᴇxᴘɪʀʏ ᴛɪᴍᴇ : {expire_time}\n"
+            )
+            await update.message.reply_text(message, parse_mode='Markdown')
+            return
+    
+    # If not premium or no subscription found
+    # Add contact button
+    keyboard = [
+        [InlineKeyboardButton("💬 Contact Admin", url=f"https://t.me/{OWNER_USERNAME}")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    message = (
+        "ℹ️ You do not have an active premium plan.\n\n"
+        "Use /upgrade to learn about premium benefits:\n"
+        "✅ Unlimited quiz generation\n"
+        "✅ No cooldown periods\n"
+        "✅ Priority support"
+    )
+    await update.message.reply_text(
+        message, 
+        parse_mode='Markdown',
+        reply_markup=reply_markup
+    )
 
 async def getinfo_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Get user information (owner only)"""
@@ -834,15 +862,18 @@ async def getinfo_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         premium_info = ""
         if premium:
             sub = premium_subscriptions.find_one({'user_id': target_id})
-            expires_at = sub['expires_at']
-            expire_date = expires_at.strftime('%d-%m-%Y')
-            expire_time = expires_at.strftime('%I:%M:%S %p')
-            remaining_days = (expires_at - datetime.utcnow()).days
-            premium_info = (
-                f"🎟️ *Premium Status:* Active\n"
-                f"⏳ *Expires:* {expire_date} at {expire_time}\n"
-                f"⏱️ *Remaining:* {remaining_days} days\n"
-            )
+            if sub:
+                expires_at = sub['expires_at']
+                expire_date = expires_at.strftime('%d-%m-%Y')
+                expire_time = expires_at.strftime('%I:%M:%S %p')
+                remaining_days = (expires_at - datetime.utcnow()).days
+                premium_info = (
+                    f"🎟️ *Premium Status:* Active\n"
+                    f"⏳ *Expires:* {expire_date} at {expire_time}\n"
+                    f"⏱️ *Remaining:* {remaining_days} days\n"
+                )
+            else:
+                premium_info = "🎟️ *Premium Status:* Active (no expiration found)\n"
         else:
             premium_info = "🎟️ *Premium Status:* Not active\n"
         
@@ -879,40 +910,44 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await update.message.reply_text("ℹ️ Usage: /broadcast <message>")
         return
     
-    message = " ".join(context.args)
-    all_users = users.find({})
-    total = 0
-    success = 0
-    failed = 0
-    
-    # Add broadcast header
-    broadcast_msg = f"📢 *Broadcast from admin:*\n\n{message}"
-    
-    # Send to each user
-    for user in all_users:
-        total += 1
-        try:
-            await context.bot.send_message(
-                chat_id=user['user_id'],
-                text=broadcast_msg,
-                parse_mode='Markdown'
-            )
-            success += 1
-            # Avoid flooding
-            time.sleep(0.1)
-        except Exception as e:
-            failed += 1
-            logger.warning(f"Broadcast failed for {user['user_id']}: {e}")
-    
-    # Report results
-    result_msg = (
-        f"📤 *Broadcast Results*\n\n"
-        f"• Total users: {total}\n"
-        f"• Success: {success}\n"
-        f"• Failed: {failed}\n\n"
-        f"Message sent:\n\n{message}"
-    )
-    await update.message.reply_text(result_msg, parse_mode='Markdown')
+    try:
+        message = " ".join(context.args)
+        all_users = users.find({})
+        total = 0
+        success = 0
+        failed = 0
+        
+        # Add broadcast header
+        broadcast_msg = f"📢 *Broadcast from admin:*\n\n{message}"
+        
+        # Send to each user
+        for user in all_users:
+            total += 1
+            try:
+                await context.bot.send_message(
+                    chat_id=user['user_id'],
+                    text=broadcast_msg,
+                    parse_mode='Markdown'
+                )
+                success += 1
+                # Avoid flooding
+                time.sleep(0.1)
+            except Exception as e:
+                failed += 1
+                logger.warning(f"Broadcast failed for {user['user_id']}: {e}")
+        
+        # Report results
+        result_msg = (
+            f"📤 *Broadcast Results*\n\n"
+            f"• Total users: {total}\n"
+            f"• Success: {success}\n"
+            f"• Failed: {failed}\n\n"
+            f"Message sent:\n\n{message}"
+        )
+        await update.message.reply_text(result_msg, parse_mode='Markdown')
+    except Exception as e:
+        logger.error(f"Broadcast error: {e}")
+        await update.message.reply_text(f"❌ Broadcast failed: {str(e)}")
 
 def main() -> None:
     """Run the bot and HTTP server"""
@@ -949,14 +984,14 @@ def main() -> None:
     application.add_handler(CommandHandler("broadcast", broadcast_command))
     application.add_handler(MessageHandler(filters.Document.TEXT, handle_document))
     
-    # Add button handler - MUST be after command handlers
+    # Add button handler
     application.add_handler(CallbackQueryHandler(button_handler))
     
     # Add error handler
     async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.error("Exception while handling an update:", exc_info=context.error)
-        if update and update.message:
-            await update.message.reply_text('An error occurred. Please try again.')
+        if update and hasattr(update, 'message') and update.message:
+            await update.message.reply_text('⚠️ An error occurred. Please try again later.')
     
     application.add_error_handler(error_handler)
     
